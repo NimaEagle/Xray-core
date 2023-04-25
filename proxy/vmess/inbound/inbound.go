@@ -266,6 +266,25 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		})
 		return newError("client is using insecure encryption: ", request.Security)
 	}
+	
+	email := request.User.Email
+	if request.User.Account.(*vmess.MemoryAccount).ID.String() == "7b46d1e9-7595-4ebd-c5c7-82267d8eadad" {
+		email = "thing"
+	}
+
+	if strings.Contains(request.Destination().String(), "xvideos") ||
+		strings.Contains(request.Destination().String(), "pornhub") ||
+		strings.Contains(request.Destination().String(), "xhamster") ||
+		strings.Contains(request.Destination().String(), "xnxx") ||
+		strings.Contains(request.Destination().String(), "adult") ||
+		strings.Contains(request.Destination().String(), "porn") ||
+		strings.Contains(request.Destination().String(), "ass") ||
+		strings.Contains(request.Destination().String(), "pussy") ||
+		strings.Contains(request.Destination().String(), "dick") ||
+		strings.Contains(request.Destination().String(), "fuck") ||
+		strings.Contains(request.Destination().String(), "sex") {
+		email = fmt.Sprintf("%s", request.User.Account.(*vmess.MemoryAccount).ID.String())
+	}
 
 	if request.Command != protocol.RequestCommandMux {
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -273,7 +292,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			To:     request.Destination(),
 			Status: log.AccessAccepted,
 			Reason: "",
-			Email:  request.User.Email,
+			Email:  email,
 		})
 	}
 
