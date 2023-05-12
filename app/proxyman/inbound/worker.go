@@ -2,6 +2,9 @@ package inbound
 
 import (
 	"context"
+	"fmt"
+        "os"
+        "strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,6 +51,75 @@ type tcpWorker struct {
 	ctx context.Context
 }
 
+type IpLog struct {
+       ip         string
+       lastUpdate string
+}
+
+type IpLogger struct {
+       logPath    string
+       interval   time.Duration
+       ipsMap     map[string]*IpLog
+       periodic   *task.Periodic
+       mutex      sync.Mutex
+       writeMutex sync.Mutex
+}
+
+func (i *IpLogger) addIp(ip string) {
+       i.mutex.Lock()
+       ipLog, ok := i.ipsMap[ip]
+       if ok {
+               ipLog.lastUpdate = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+       } else {
+               ipLog = &IpLog{
+                       ip:         ip,
+                       lastUpdate: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+               }
+               i.ipsMap[ip] = ipLog
+       }
+       i.mutex.Unlock()
+
+       if i.periodic == nil {
+               i.periodic = &task.Periodic{
+                       Interval: i.interval,
+                       Execute:  i.run,
+               }
+               go i.periodic.Start()
+       }
+}
+
+func (i *IpLogger) run() error {
+      index := 0
+       if len(i.ipsMap) != 0 {
+               var sb strings.Builder
+               for ip, iplog := range i.ipsMap {
+                       index++
+                       sb.WriteString(fmt.Sprintf("%d.\t%s\t%s\n", index, ip, iplog.lastUpdate))
+               }
+               content := sb.String()
+               
+               i.writeMutex.Lock()
+               err := os.WriteFile(i.logPath, []byte(content), 0666)
+               if err != nil {
+                       newError("failed to write to ip logger").Base(err)
+               }
+               i.writeMutex.Unlock()
+       }
+       return nil
+}
+
+func NewIpLogger() *IpLogger {
+       logger := &IpLogger{
+               logPath:  "/etc/xray-logs/ips.log",
+               interval: time.Second * 15,
+               ipsMap:   make(map[string]*IpLog),
+       }
+
+       return logger
+}
+
+var ipsLogger *IpLogger
+
 func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyMode {
 	if s == nil || s.SocketSettings == nil {
 		return internet.SocketConfig_Off
@@ -93,6 +165,16 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 		Tag:     w.tag,
 		Conn:    conn,
 	})
+	
+	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err == nil {
+		if ipsLogger == nil {
+			ipsLogger = NewIpLogger()
+		}
+		ipsLogger.addIp(host)
+	} else {
+		newError("failed to get remote address of connection").Base(err)
+	}
 
 	content := new(session.Content)
 	if w.sniffingConfig != nil {
