@@ -21,7 +21,7 @@ on:
       - ".github/workflows/*.yml"
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Restore Cache
         uses: actions/cache/restore@v3
@@ -148,7 +148,7 @@ jobs:
           # END OPENBSD ARM
       fail-fast: false
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
