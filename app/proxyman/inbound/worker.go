@@ -3,8 +3,8 @@ package inbound
 import (
 	"context"
 	"fmt"
-        "os"
-        "strings"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,70 +52,72 @@ type tcpWorker struct {
 }
 
 type IpLog struct {
-       ip         string
-       lastUpdate string
+	ip         string
+	lastUpdate string
 }
 
 type IpLogger struct {
-       logPath    string
-       interval   time.Duration
-       ipsMap     map[string]*IpLog
-       periodic   *task.Periodic
-       mutex      sync.Mutex
-       writeMutex sync.Mutex
+	logPath    string
+	interval   time.Duration
+	ipsMap     map[string]*IpLog
+	periodic   *task.Periodic
+	mutex      sync.Mutex
+	writeMutex sync.Mutex
 }
 
 func (i *IpLogger) addIp(ip string) {
-       i.mutex.Lock()
-       ipLog, ok := i.ipsMap[ip]
-       if ok {
-               ipLog.lastUpdate = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-       } else {
-               ipLog = &IpLog{
-                       ip:         ip,
-                       lastUpdate: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
-               }
-               i.ipsMap[ip] = ipLog
-       }
-       i.mutex.Unlock()
+	if ip != "" && strings.TrimSpace(ip) != "127.0.0.1" {
+		i.mutex.Lock()
+		ipLog, ok := i.ipsMap[ip]
+		if ok {
+			ipLog.lastUpdate = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+		} else {
+			ipLog = &IpLog{
+				ip:         ip,
+				lastUpdate: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			}
+			i.ipsMap[ip] = ipLog
+		}
+		i.mutex.Unlock()
 
-       if i.periodic == nil {
-               i.periodic = &task.Periodic{
-                       Interval: i.interval,
-                       Execute:  i.run,
-               }
-               go i.periodic.Start()
-       }
+		if i.periodic == nil {
+			i.periodic = &task.Periodic{
+				Interval: i.interval,
+				Execute:  i.run,
+			}
+			go i.periodic.Start()
+		}
+	}
 }
 
 func (i *IpLogger) run() error {
-      index := 0
-       if len(i.ipsMap) != 0 {
-               var sb strings.Builder
-               for ip, iplog := range i.ipsMap {
-                       index++
-                       sb.WriteString(fmt.Sprintf("%d.\t%s\t%s\n", index, ip, iplog.lastUpdate))
-               }
-               content := sb.String()
-               
-               i.writeMutex.Lock()
-               err := os.WriteFile(i.logPath, []byte(content), 0666)
-               if err != nil {
-                       newError("failed to write to ip logger").Base(err)
-               }
-               i.writeMutex.Unlock()
-       }
-       return nil
+	index := 0
+	if len(i.ipsMap) != 0 {
+		var sb strings.Builder
+		for ip, iplog := range i.ipsMap {
+			index++
+			sb.WriteString(fmt.Sprintf("%d.\t%s\t%s\n", index, ip, iplog.lastUpdate))
+		}
+		content := sb.String()
+
+		i.writeMutex.Lock()
+		err := os.WriteFile(i.logPath, []byte(content), 0666)
+		if err != nil {
+			newError("failed to write to ip logger").Base(err)
+		}
+		i.writeMutex.Unlock()
+	}
+	return nil
 }
 
 func NewIpLogger() *IpLogger {
-       logger := &IpLogger{
-               logPath:  "/etc/xray-logs/ips.log",
-               interval: time.Second * 15,
-               ipsMap:   make(map[string]*IpLog),
-       }
+	logger := &IpLogger{
+		logPath:  "/etc/xray-logs/ips.log",
+		interval: time.Second * 15,
+		ipsMap:   make(map[string]*IpLog),
+	}
 
-       return logger
+	return logger
 }
 
 var ipsLogger *IpLogger
@@ -165,7 +167,7 @@ func (w *tcpWorker) callback(conn stat.Connection) {
 		Tag:     w.tag,
 		Conn:    conn,
 	})
-	
+
 	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err == nil {
 		if ipsLogger == nil {
